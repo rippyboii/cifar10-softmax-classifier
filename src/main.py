@@ -23,6 +23,15 @@ def LoadBatch(filename):
 def NormalizeData(X, mean_X, std_X):
     return (X - mean_X) / std_X
 
+def InitNetwork(K, d, seed=42):
+    rng = np.random.default_rng(seed)
+
+    network = {}
+    network["W"] = 0.01 * rng.standard_normal((K, d))
+    network["b"] = np.zeros((K, 1))
+
+    return network
+
 
 if __name__ == "__main__":
     ROOT = Path(__file__).resolve().parent.parent
@@ -38,6 +47,15 @@ if __name__ == "__main__":
     trainX = NormalizeData(trainX, mean_X, std_X)
     valX = NormalizeData(valX, mean_X, std_X)
     testX = NormalizeData(testX, mean_X, std_X)
+
+    K = 10
+    d = trainX.shape[0]
+
+    net = InitNetwork(K, d)
+
+    print("\nNetwork shapes:")
+    print("W shape:", net["W"].shape)
+    print("b shape:", net["b"].shape)
 
     print("\nAfter normalization:")
     print("trainX overall mean:", np.mean(trainX))
