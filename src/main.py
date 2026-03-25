@@ -48,6 +48,12 @@ def ApplyNetwork(X, network):
 
     return P
 
+def ComputeLoss(P, y):
+    n = P.shape[1]
+    p_correct = P[y, np.arange(n)]
+    L = -np.mean(np.log(p_correct))
+    return L
+
 if __name__ == "__main__":
     ROOT = Path(__file__).resolve().parent.parent
     data_dir = ROOT / "Datasets" / "cifar-10-python" / "cifar-10-batches-py"
