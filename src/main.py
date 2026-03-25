@@ -54,6 +54,12 @@ def ComputeLoss(P, y):
     L = -np.mean(np.log(p_correct))
     return L
 
+
+def ComputeAccuracy(P, y):
+    y_pred = np.argmax(P, axis=0)
+    acc = np.mean(y_pred == y)
+    return acc
+
 if __name__ == "__main__":
     ROOT = Path(__file__).resolve().parent.parent
     data_dir = ROOT / "Datasets" / "cifar-10-python" / "cifar-10-batches-py"
@@ -77,6 +83,11 @@ if __name__ == "__main__":
     P = ApplyNetwork(trainX[:, 0:100], net)
 
     L = ComputeLoss(P, trainy[:100])
+
+    acc = ComputeAccuracy(P, trainy[:100])
+
+    print("\nAccuracy check:")
+    print("Accuracy:", acc)
 
     print("\nLoss check:")
     print("Loss:", L)
