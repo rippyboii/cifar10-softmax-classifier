@@ -68,6 +68,14 @@ if __name__ == "__main__":
 
     net = InitNetwork(K, d)
 
+    P = ApplyNetwork(trainX[:, 0:100], net)
+
+    print("\nApplyNetwork check:")
+    print("P shape:", P.shape)
+    print("First column sum:", np.sum(P[:, 0]))
+    print("Min prob:", np.min(P))
+    print("Max prob:", np.max(P))
+
     print("\nNetwork shapes:")
     print("W shape:", net["W"].shape)
     print("b shape:", net["b"].shape)
