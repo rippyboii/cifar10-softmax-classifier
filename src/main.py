@@ -76,6 +76,11 @@ if __name__ == "__main__":
 
     P = ApplyNetwork(trainX[:, 0:100], net)
 
+    L = ComputeLoss(P, trainy[:100])
+
+    print("\nLoss check:")
+    print("Loss:", L)
+
     print("\nApplyNetwork check:")
     print("P shape:", P.shape)
     print("First column sum:", np.sum(P[:, 0]))
