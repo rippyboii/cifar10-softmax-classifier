@@ -60,6 +60,22 @@ def ComputeAccuracy(P, y):
     acc = np.mean(y_pred == y)
     return acc
 
+def BackwardPass(X, Y, P, network, lam):
+    W = network["W"]
+    n = X.shape[1]
+
+    G = P - Y
+
+    grad_W = (G @ X.T) / n + 2 * lam * W
+    grad_b = np.sum(G, axis=1, keepdims=True) / n
+
+    grads = {
+        "W": grad_W,
+        "b": grad_b
+    }
+
+    return grads
+
 if __name__ == "__main__":
     ROOT = Path(__file__).resolve().parent.parent
     data_dir = ROOT / "Datasets" / "cifar-10-python" / "cifar-10-batches-py"
@@ -85,6 +101,13 @@ if __name__ == "__main__":
     L = ComputeLoss(P, trainy[:100])
 
     acc = ComputeAccuracy(P, trainy[:100])
+
+    lam = 0.0
+    grads = BackwardPass(trainX[:, 0:100], trainY[:, 0:100], P, net, lam)
+
+    print("\nBackwardPass check:")
+    print("grad_W shape:", grads["W"].shape)
+    print("grad_b shape:", grads["b"].shape)
 
     print("\nAccuracy check:")
     print("Accuracy:", acc)
