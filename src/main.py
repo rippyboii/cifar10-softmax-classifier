@@ -20,6 +20,9 @@ def LoadBatch(filename):
 
     return X, Y, y
 
+def NormalizeData(X, mean_X, std_X):
+    return (X - mean_X) / std_X
+
 
 if __name__ == "__main__":
     ROOT = Path(__file__).resolve().parent.parent
@@ -28,6 +31,17 @@ if __name__ == "__main__":
     trainX, trainY, trainy = LoadBatch(data_dir / "data_batch_1")
     valX, valY, valy = LoadBatch(data_dir / "data_batch_2")
     testX, testY, testy = LoadBatch(data_dir / "test_batch")
+
+    mean_X = np.mean(trainX, axis=1, keepdims=True)
+    std_X = np.std(trainX, axis=1, keepdims=True)
+
+    trainX = NormalizeData(trainX, mean_X, std_X)
+    valX = NormalizeData(valX, mean_X, std_X)
+    testX = NormalizeData(testX, mean_X, std_X)
+
+    print("\nAfter normalization:")
+    print("trainX overall mean:", np.mean(trainX))
+    print("trainX overall std:", np.std(trainX))
 
     print("trainX shape:", trainX.shape)
     print("trainY shape:", trainY.shape)
