@@ -33,6 +33,21 @@ def InitNetwork(K, d, seed=42):
     return network
 
 
+def softmax(s):
+    s_shifted = s - np.max(s, axis=0, keepdims=True)
+    exp_s = np.exp(s_shifted)
+    return exp_s / np.sum(exp_s, axis=0, keepdims=True)
+
+
+def ApplyNetwork(X, network):
+    W = network["W"]
+    b = network["b"]
+
+    s = W @ X + b
+    P = softmax(s)
+
+    return P
+
 if __name__ == "__main__":
     ROOT = Path(__file__).resolve().parent.parent
     data_dir = ROOT / "Datasets" / "cifar-10-python" / "cifar-10-batches-py"
