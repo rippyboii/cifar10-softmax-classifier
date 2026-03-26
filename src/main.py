@@ -130,6 +130,8 @@ def MiniBatchGD(X, Y, y, X_val, Y_val, y_val, GDparams, init_net, lam):
     history = {
         "train_loss": [],
         "val_loss": [],
+        "train_cost": [],
+        "val_cost": [],
         "train_acc": [],
         "val_acc": []
     }
@@ -149,25 +151,40 @@ def MiniBatchGD(X, Y, y, X_val, Y_val, y_val, GDparams, init_net, lam):
             net["W"] -= eta * grads["W"]
             net["b"] -= eta * grads["b"]
 
+        # compute once
         P_train = ApplyNetwork(X, net)
         P_val = ApplyNetwork(X_val, net)
 
         train_loss = ComputeLoss(P_train, y)
         val_loss = ComputeLoss(P_val, y_val)
 
+        train_cost = ComputeCost(P_train, y, net, lam)
+        val_cost = ComputeCost(P_val, y_val, net, lam)
+
         train_acc = ComputeAccuracy(P_train, y)
         val_acc = ComputeAccuracy(P_val, y_val)
 
+        # store everything
         history["train_loss"].append(train_loss)
         history["val_loss"].append(val_loss)
+        history["train_cost"].append(train_cost)
+        history["val_cost"].append(val_cost)
         history["train_acc"].append(train_acc)
         history["val_acc"].append(val_acc)
 
+
         print(f"Epoch {epoch+1}/{n_epochs} | "
-              f"train loss: {train_loss:.4f} | val loss: {val_loss:.4f} | "
-              f"train acc: {train_acc:.4f} | val acc: {val_acc:.4f}")
+            f"train loss: {train_loss:.4f} | val loss: {val_loss:.4f} | "
+            f"train cost: {train_cost:.4f} | val cost: {val_cost:.4f} | "
+            f"train acc: {train_acc:.4f} | val acc: {val_acc:.4f}")
 
     return net, history
+
+def ComputeCost(P, y, network, lam):
+    loss = ComputeLoss(P, y)
+    W = network["W"]
+    reg = lam * np.sum(W ** 2)
+    return loss + reg
 
 if __name__ == "__main__":
     ROOT = Path(__file__).resolve().parent.parent
@@ -220,7 +237,7 @@ if __name__ == "__main__":
     GDparams = {
         "n_batch": 100,
         "eta": 0.001,
-        "n_epochs": 10
+        "n_epochs": 40
     }
 
     trained_net, history = MiniBatchGD(
