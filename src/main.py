@@ -172,6 +172,9 @@ def MiniBatchGD(X, Y, y, X_val, Y_val, y_val, GDparams, init_net, lam):
         history["train_acc"].append(train_acc)
         history["val_acc"].append(val_acc)
 
+        P_test = ApplyNetwork(testX, trained_net)
+        test_acc = ComputeAccuracy(P_test, testy)
+        print("Test accuracy:", test_acc)
 
         print(f"Epoch {epoch+1}/{n_epochs} | "
             f"train loss: {train_loss:.4f} | val loss: {val_loss:.4f} | "
