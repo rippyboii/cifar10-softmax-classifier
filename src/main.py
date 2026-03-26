@@ -117,6 +117,58 @@ def MaxAbsoluteError(a, b):
 def MaxRelativeError(a, b, eps=1e-10):
     return np.max(np.abs(a - b) / np.maximum(eps, np.abs(a) + np.abs(b)))
 
+def MiniBatchGD(X, Y, y, X_val, Y_val, y_val, GDparams, init_net, lam):
+    n_batch = GDparams["n_batch"]
+    eta = GDparams["eta"]
+    n_epochs = GDparams["n_epochs"]
+
+    net = {
+        "W": init_net["W"].copy(),
+        "b": init_net["b"].copy()
+    }
+
+    history = {
+        "train_loss": [],
+        "val_loss": [],
+        "train_acc": [],
+        "val_acc": []
+    }
+
+    n = X.shape[1]
+
+    for epoch in range(n_epochs):
+        for j in range(0, n, n_batch):
+            j_end = j + n_batch
+
+            X_batch = X[:, j:j_end]
+            Y_batch = Y[:, j:j_end]
+
+            P_batch = ApplyNetwork(X_batch, net)
+            grads = BackwardPass(X_batch, Y_batch, P_batch, net, lam)
+
+            net["W"] -= eta * grads["W"]
+            net["b"] -= eta * grads["b"]
+
+        P_train = ApplyNetwork(X, net)
+        P_val = ApplyNetwork(X_val, net)
+
+        train_loss = ComputeLoss(P_train, y)
+        val_loss = ComputeLoss(P_val, y_val)
+
+        train_acc = ComputeAccuracy(P_train, y)
+        val_acc = ComputeAccuracy(P_val, y_val)
+
+        history["train_loss"].append(train_loss)
+        history["val_loss"].append(val_loss)
+        history["train_acc"].append(train_acc)
+        history["val_acc"].append(val_acc)
+
+        print(f"Epoch {epoch+1}/{n_epochs} | "
+              f"train loss: {train_loss:.4f} | val loss: {val_loss:.4f} | "
+              f"train acc: {train_acc:.4f} | val acc: {val_acc:.4f}")
+
+    return net, history
+
 if __name__ == "__main__":
     ROOT = Path(__file__).resolve().parent.parent
     data_dir = ROOT / "Datasets" / "cifar-10-python" / "cifar-10-batches-py"
@@ -164,6 +216,20 @@ if __name__ == "__main__":
 
     my_grads = BackwardPass(X_small, Y_small, P_small, small_net, lam)
     torch_grads = ComputeGradsWithTorch(X_small, y_small, small_net)
+
+    GDparams = {
+        "n_batch": 100,
+        "eta": 0.001,
+        "n_epochs": 10
+    }
+
+    trained_net, history = MiniBatchGD(
+        trainX, trainY, trainy,
+        valX, valY, valy,
+        GDparams,
+        net,
+        lam=0.0
+    )
 
     print("\nGradient check:")
     print("max abs error W:", MaxAbsoluteError(my_grads["W"], torch_grads["W"]))
