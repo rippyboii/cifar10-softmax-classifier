@@ -189,6 +189,32 @@ def ComputeCost(P, y, network, lam):
     reg = lam * np.sum(W ** 2)
     return loss + reg
 
+def PlotHistory(history, title=""):
+    epochs = range(1, len(history["train_loss"]) + 1)
+
+    plt.figure(figsize=(12,5))
+
+    # Loss
+    plt.subplot(1,2,1)
+    plt.plot(epochs, history["train_loss"], label="train loss")
+    plt.plot(epochs, history["val_loss"], label="val loss")
+    plt.xlabel("Epoch")
+    plt.ylabel("Loss")
+    plt.title("Loss")
+    plt.legend()
+
+    # Cost
+    plt.subplot(1,2,2)
+    plt.plot(epochs, history["train_cost"], label="train cost")
+    plt.plot(epochs, history["val_cost"], label="val cost")
+    plt.xlabel("Epoch")
+    plt.ylabel("Cost")
+    plt.title("Cost")
+    plt.legend()
+
+    plt.suptitle(title)
+    plt.show()
+
 if __name__ == "__main__":
     ROOT = Path(__file__).resolve().parent.parent
     data_dir = ROOT / "Datasets" / "cifar-10-python" / "cifar-10-batches-py"
