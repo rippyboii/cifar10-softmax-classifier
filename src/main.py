@@ -238,8 +238,17 @@ if __name__ == "__main__":
     figures_dir = ROOT / "figures"
     figures_dir.mkdir(exist_ok=True)
 
-    trainX, trainY, trainy = LoadBatch(data_dir / "data_batch_1")
-    valX,   valY,   valy   = LoadBatch(data_dir / "data_batch_2")
+    all_X, all_Y, all_y = [], [], []
+    for i in range(1, 6):
+        X_i, Y_i, y_i = LoadBatch(data_dir / f"data_batch_{i}")
+        all_X.append(X_i); all_Y.append(Y_i); all_y.append(y_i)
+    all_X = np.concatenate(all_X, axis=1)
+    all_Y = np.concatenate(all_Y, axis=1)
+    all_y = np.concatenate(all_y, axis=0)
+
+    trainX, trainY, trainy = all_X[:, :-1000], all_Y[:, :-1000], all_y[:-1000]
+    valX,   valY,   valy   = all_X[:, -1000:], all_Y[:, -1000:], all_y[-1000:]
+
     testX,  testY,  testy  = LoadBatch(data_dir / "test_batch")
 
     mean_X = np.mean(trainX, axis=1, keepdims=True)
