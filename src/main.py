@@ -109,9 +109,11 @@ def MaxRelativeError(a, b, eps=1e-10):
     return np.max(np.abs(a - b) / np.maximum(eps, np.abs(a) + np.abs(b)))
 
 def MiniBatchGD(X, Y, y, X_val, Y_val, y_val, GDparams, init_net, lam, inds_flip=None, rng=None):
-    n_batch = GDparams["n_batch"]
-    eta = GDparams["eta"]
-    n_epochs = GDparams["n_epochs"]
+    n_batch      = GDparams["n_batch"]
+    eta          = GDparams["eta"]
+    n_epochs     = GDparams["n_epochs"]
+    decay_factor = GDparams.get("decay_factor", 1.0)   
+    decay_every  = GDparams.get("decay_every",  0)     
 
     net = {
         "W": init_net["W"].copy(),
@@ -171,7 +173,11 @@ def MiniBatchGD(X, Y, y, X_val, Y_val, y_val, GDparams, init_net, lam, inds_flip
         print(f"Epoch {epoch+1}/{n_epochs} | "
             f"train loss: {train_loss:.4f} | val loss: {val_loss:.4f} | "
             f"train cost: {train_cost:.4f} | val cost: {val_cost:.4f} | "
-            f"train acc: {train_acc:.4f} | val acc: {val_acc:.4f}")
+            f"train acc: {train_acc:.4f} | val acc: {val_acc:.4f} | eta: {eta:.6f}")
+
+        if decay_every > 0 and (epoch + 1) % decay_every == 0:
+            eta *= decay_factor
+            print(f"  [LR decay] eta → {eta:.6f}")
 
     return net, history
 
@@ -339,4 +345,40 @@ if __name__ == "__main__":
 
         PlotHistory(history, title=f"lam={lam}, eta={eta}", save_path=figures_dir / f"history_{label}.png")
 
-        VisualizeWeights(trained_net,save_path=figures_dir / f"weights_{label}.png")
+        VisualizeWeights(trained_net, save_path=figures_dir / f"weights_{label}.png")
+
+    print("\n-- Grid search ------------------------------------")
+    grid_etas    = [0.01, 0.005, 0.001]
+    grid_lams    = [0.01, 0.05,  0.1]
+    grid_batches = [50,   100,   200]
+
+    best_val_acc = -1.0
+    best_cfg_gs  = None
+
+    for gs_eta in grid_etas:
+        for gs_lam in grid_lams:
+            for gs_batch in grid_batches:
+                gs_label = f"gs_eta{gs_eta}_lam{gs_lam}_batch{gs_batch}"
+                print(f"\n  {gs_label}")
+
+                gs_params = {
+                    "n_batch":      gs_batch,
+                    "eta":          gs_eta,
+                    "n_epochs":     40,
+                    "decay_factor": 0.1,
+                    "decay_every":  20,
+                }
+                gs_net = InitNetwork(K, d, seed=42)
+                gs_trained, gs_history = MiniBatchGD(
+                    trainX, trainY, trainy, valX, valY, valy,
+                    gs_params, gs_net, gs_lam,
+                    inds_flip=inds_flip, rng=np.random.default_rng(42)
+                )
+                val_acc_final = gs_history["val_acc"][-1]
+                print(f"  val acc: {val_acc_final*100:.2f}%")
+
+                if val_acc_final > best_val_acc:
+                    best_val_acc = val_acc_final
+                    best_cfg_gs  = gs_label
+
+    print(f"\n-- Grid search best: {best_cfg_gs}  val acc: {best_val_acc*100:.2f}%")
