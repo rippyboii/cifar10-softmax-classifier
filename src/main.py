@@ -108,7 +108,7 @@ def MaxAbsoluteError(a, b):
 def MaxRelativeError(a, b, eps=1e-10):
     return np.max(np.abs(a - b) / np.maximum(eps, np.abs(a) + np.abs(b)))
 
-def MiniBatchGD(X, Y, y, X_val, Y_val, y_val, GDparams, init_net, lam):
+def MiniBatchGD(X, Y, y, X_val, Y_val, y_val, GDparams, init_net, lam, inds_flip=None, rng=None):
     n_batch = GDparams["n_batch"]
     eta = GDparams["eta"]
     n_epochs = GDparams["n_epochs"]
@@ -133,8 +133,13 @@ def MiniBatchGD(X, Y, y, X_val, Y_val, y_val, GDparams, init_net, lam):
         for j in range(0, n, n_batch):
             j_end = j + n_batch
 
-            X_batch = X[:, j:j_end]
+            X_batch = X[:, j:j_end].copy()
             Y_batch = Y[:, j:j_end]
+
+            if inds_flip is not None and rng is not None:
+                flip_mask = rng.random(X_batch.shape[1]) < 0.5
+                X_flipped = X_batch[inds_flip, :]
+                X_batch[:, flip_mask] = X_flipped[:, flip_mask]
 
             P_batch = ApplyNetwork(X_batch, net)
             grads = BackwardPass(X_batch, Y_batch, P_batch, net, lam)
@@ -294,6 +299,15 @@ if __name__ == "__main__":
     print(f"  max rel error  W: {MaxRelativeError(my_grads_reg['W'], torch_grads_reg['W']):.2e}")
     print(f"  max rel error  b: {MaxRelativeError(my_grads_reg['b'], torch_grads_reg['b']):.2e}")
 
+    aa = np.int32(np.arange(32)).reshape((32, 1))
+    bb = np.int32(np.arange(31, -1, -1)).reshape((32, 1))
+    vv = np.tile(32 * aa, (1, 32))
+    ind_flip = vv.reshape((32 * 32, 1)) + np.tile(bb, (32, 1))
+    inds_flip = np.vstack((ind_flip, 1024 + ind_flip))
+    inds_flip = np.vstack((inds_flip, 2048 + ind_flip)).squeeze()  # (3072,)
+
+    train_rng = np.random.default_rng(42)
+
     # Training for all 4 given configurations
     configs = [
         {"lam": 0.0, "eta": 0.1,   "n_epochs": 40, "n_batch": 100},
@@ -315,7 +329,8 @@ if __name__ == "__main__":
         init_net = InitNetwork(K, d, seed=42)
         GDparams = {"n_batch": n_batch, "eta": eta, "n_epochs": n_epochs}
 
-        trained_net, history = MiniBatchGD(trainX, trainY, trainy, valX,   valY,   valy, GDparams, init_net, lam)
+        trained_net, history = MiniBatchGD(trainX, trainY, trainy, valX, valY, valy, GDparams, init_net, lam,
+                                            inds_flip=inds_flip, rng=train_rng)
 
         # test accuracy
         P_test   = ApplyNetwork(testX, trained_net)
