@@ -108,12 +108,74 @@ def MaxAbsoluteError(a, b):
 def MaxRelativeError(a, b, eps=1e-10):
     return np.max(np.abs(a - b) / np.maximum(eps, np.abs(a) + np.abs(b)))
 
-def MiniBatchGD(X, Y, y, X_val, Y_val, y_val, GDparams, init_net, lam, inds_flip=None, rng=None):
+
+def sigmoid(s):
+    return 1.0 / (1.0 + np.exp(-s))
+
+
+def ApplyNetworkSigmoid(X, network):
+    W = network["W"]
+    b = network["b"]
+    return sigmoid(W @ X + b)
+
+
+def ComputeLossBCE(P, y):
+    """Mean multiple-binary-cross-entropy loss. y is integer labels (1-D)."""
+    K, n = P.shape
+    Y = np.zeros_like(P)
+    Y[y, np.arange(n)] = 1.0
+    P_c = np.clip(P, 1e-15, 1 - 1e-15)
+    L = -np.mean(np.sum((1 - Y) * np.log(1 - P_c) + Y * np.log(P_c), axis=0)) / K
+    return L
+
+
+def BackwardPassBCE(X, Y, P, network, lam):
+    """Gradient of mean BCE loss + L2.  ∂l/∂s = (1/K)(p − y)."""
+    W = network["W"]
+    n = X.shape[1]
+    K = Y.shape[0]
+
+    G = (P - Y) / K                               # (K, n)
+    grad_W = (G @ X.T) / n + 2 * lam * W
+    grad_b = np.sum(G, axis=1, keepdims=True) / n
+
+    return {"W": grad_W, "b": grad_b}
+
+
+def ComputeGradsWithTorchBCE(X, y, network_params, lam=0.0):
+    Xt = torch.from_numpy(X)
+    W  = torch.tensor(network_params['W'], requires_grad=True)
+    b  = torch.tensor(network_params['b'], requires_grad=True)
+    K, n = W.shape[0], X.shape[1]
+
+    Y = np.zeros((K, n))
+    Y[y, np.arange(n)] = 1.0
+    Yt = torch.from_numpy(Y)
+
+    scores = torch.matmul(W, Xt) + b
+    P = torch.sigmoid(scores)
+    P_c = torch.clamp(P, 1e-15, 1 - 1e-15)
+    bce = -torch.mean(
+        torch.sum((1 - Yt) * torch.log(1 - P_c) + Yt * torch.log(P_c), dim=0)
+    ) / K
+    cost = bce + lam * torch.sum(W * W)
+    cost.backward()
+
+    return {"W": W.grad.numpy(), "b": b.grad.numpy()}
+
+
+def MiniBatchGD(X, Y, y, X_val, Y_val, y_val, GDparams, init_net, lam,
+                inds_flip=None, rng=None,
+                apply_fn=None, loss_fn=None, backward_fn=None):
+    if apply_fn    is None: apply_fn    = ApplyNetwork
+    if loss_fn     is None: loss_fn     = ComputeLoss
+    if backward_fn is None: backward_fn = BackwardPass
+
     n_batch      = GDparams["n_batch"]
     eta          = GDparams["eta"]
     n_epochs     = GDparams["n_epochs"]
-    decay_factor = GDparams.get("decay_factor", 1.0)   
-    decay_every  = GDparams.get("decay_every",  0)     
+    decay_factor = GDparams.get("decay_factor", 1.0)
+    decay_every  = GDparams.get("decay_every",  0)
 
     net = {
         "W": init_net["W"].copy(),
@@ -143,21 +205,21 @@ def MiniBatchGD(X, Y, y, X_val, Y_val, y_val, GDparams, init_net, lam, inds_flip
                 X_flipped = X_batch[inds_flip, :]
                 X_batch[:, flip_mask] = X_flipped[:, flip_mask]
 
-            P_batch = ApplyNetwork(X_batch, net)
-            grads = BackwardPass(X_batch, Y_batch, P_batch, net, lam)
+            P_batch = apply_fn(X_batch, net)
+            grads = backward_fn(X_batch, Y_batch, P_batch, net, lam)
 
             net["W"] -= eta * grads["W"]
             net["b"] -= eta * grads["b"]
 
         # compute once
-        P_train = ApplyNetwork(X, net)
-        P_val = ApplyNetwork(X_val, net)
+        P_train = apply_fn(X, net)
+        P_val   = apply_fn(X_val, net)
 
-        train_loss = ComputeLoss(P_train, y)
-        val_loss = ComputeLoss(P_val, y_val)
+        train_loss = loss_fn(P_train, y)
+        val_loss   = loss_fn(P_val,   y_val)
 
-        train_cost = ComputeCost(P_train, y, net, lam)
-        val_cost = ComputeCost(P_val, y_val, net, lam)
+        train_cost = train_loss + lam * np.sum(net["W"] ** 2)
+        val_cost   = val_loss   + lam * np.sum(net["W"] ** 2)
 
         train_acc = ComputeAccuracy(P_train, y)
         val_acc = ComputeAccuracy(P_val, y_val)
@@ -242,6 +304,24 @@ def VisualizeWeights(network, save_path=None):
         plt.savefig(save_path, dpi=150, bbox_inches="tight")
         print(f"Saved weights: {save_path}")
     plt.close()
+
+
+def PlotConfidenceHistogram(p_correct, p_wrong, title="", save_path=None):
+    """Histograms of P(true class) for correctly vs incorrectly classified examples."""
+    _, axs = plt.subplots(1, 2, figsize=(10, 4), sharey=True)
+    axs[0].hist(p_correct, bins=20, range=(0, 1), color="steelblue")
+    axs[0].set_title(f"Correct ({len(p_correct)})")
+    axs[0].set_xlabel("P(true class)")
+    axs[1].hist(p_wrong, bins=20, range=(0, 1), color="tomato")
+    axs[1].set_title(f"Incorrect ({len(p_wrong)})")
+    axs[1].set_xlabel("P(true class)")
+    plt.suptitle(title)
+    plt.tight_layout()
+    if save_path:
+        plt.savefig(save_path, dpi=150, bbox_inches="tight")
+        print(f"Saved histogram: {save_path}")
+    plt.close()
+
 
 if __name__ == "__main__":
     ROOT = Path(__file__).resolve().parent.parent
@@ -382,3 +462,75 @@ if __name__ == "__main__":
                     best_cfg_gs  = gs_label
 
     print(f"\n-- Grid search best: {best_cfg_gs}  val acc: {best_val_acc*100:.2f}%")
+
+    # ------------------------------------------------------------------ #
+    # Exercise 2.2: Sigmoid + multiple binary cross-entropy               #
+    # ------------------------------------------------------------------ #
+
+    # --- gradient check ---
+    P_bce_small  = ApplyNetworkSigmoid(X_small, small_net)
+    Y_small_oh   = np.zeros((K, n_small))
+    Y_small_oh[y_small, np.arange(n_small)] = 1.0
+    my_grads_bce    = BackwardPassBCE(X_small, Y_small_oh, P_bce_small, small_net, lam=0.0)
+    torch_grads_bce = ComputeGradsWithTorchBCE(X_small, y_small, small_net, lam=0.0)
+
+    print("\n-- BCE gradient check (lam=0) -------------------------")
+    print(f"  max abs error  W: {MaxAbsoluteError(my_grads_bce['W'], torch_grads_bce['W']):.2e}")
+    print(f"  max abs error  b: {MaxAbsoluteError(my_grads_bce['b'], torch_grads_bce['b']):.2e}")
+    print(f"  max rel error  W: {MaxRelativeError(my_grads_bce['W'], torch_grads_bce['W']):.2e}")
+    print(f"  max rel error  b: {MaxRelativeError(my_grads_bce['b'], torch_grads_bce['b']):.2e}")
+
+    # --- train BCE (eta *= K to compensate for 1/K in gradient) ---
+    print("\n-- BCE training -----------------------------------")
+    bce_params = {"n_batch": 50, "eta": 0.01, "n_epochs": 40,
+                  "decay_factor": 0.1, "decay_every": 20}
+    bce_net = InitNetwork(K, d, seed=42)
+    trained_bce, history_bce = MiniBatchGD(
+        trainX, trainY, trainy, valX, valY, valy,
+        bce_params, bce_net, lam=0.01,
+        inds_flip=inds_flip, rng=np.random.default_rng(42),
+        apply_fn=ApplyNetworkSigmoid,
+        loss_fn=ComputeLossBCE,
+        backward_fn=BackwardPassBCE
+    )
+
+    # --- softmax comparison run with identical hyperparams ---
+    print("\n-- Softmax comparison run -------------------------")
+    sm_params = {"n_batch": 50, "eta": 0.001, "n_epochs": 40,
+                 "decay_factor": 0.1, "decay_every": 20}
+    sm_net = InitNetwork(K, d, seed=42)
+    trained_sm, history_sm = MiniBatchGD(
+        trainX, trainY, trainy, valX, valY, valy,
+        sm_params, sm_net, lam=0.01,
+        inds_flip=inds_flip, rng=np.random.default_rng(42)
+    )
+
+    # --- test accuracy ---
+    P_test_bce = ApplyNetworkSigmoid(testX, trained_bce)
+    P_test_sm  = ApplyNetwork(testX,         trained_sm)
+    acc_bce = ComputeAccuracy(P_test_bce, testy)
+    acc_sm  = ComputeAccuracy(P_test_sm,  testy)
+    print(f"\n  BCE  test accuracy: {acc_bce*100:.2f}%")
+    print(f"  Softmax test accuracy: {acc_sm*100:.2f}%")
+
+    # --- loss curve plots ---
+    PlotHistory(history_bce, title="BCE (sigmoid), eta=0.01, lam=0.01",
+                save_path=figures_dir / "history_bce.png")
+    PlotHistory(history_sm,  title="Softmax CE,    eta=0.001, lam=0.01",
+                save_path=figures_dir / "history_softmax_cmp.png")
+
+    # --- histogram: P(true class) for correct vs incorrect ---
+    def true_class_probs(P, y):
+        return P[y, np.arange(P.shape[1])]
+
+    p_true_bce = true_class_probs(P_test_bce, testy)
+    correct_bce = np.argmax(P_test_bce, axis=0) == testy
+    PlotConfidenceHistogram(p_true_bce[correct_bce], p_true_bce[~correct_bce],
+                            title="Sigmoid BCE — P(true class)",
+                            save_path=figures_dir / "histogram_bce.png")
+
+    p_true_sm = true_class_probs(P_test_sm, testy)
+    correct_sm = np.argmax(P_test_sm, axis=0) == testy
+    PlotConfidenceHistogram(p_true_sm[correct_sm], p_true_sm[~correct_sm],
+                            title="Softmax CE — P(true class)",
+                            save_path=figures_dir / "histogram_softmax.png")

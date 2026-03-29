@@ -203,4 +203,104 @@ For the bonus exercise, four cumulative improvements were applied: using all ava
 
 The experiments confirm that (1)~more training data is the most impactful lever for a linear model, (2)~augmentation and L2 regularization are partially redundant and $\lambda$ should be reduced when augmentation is used, (3)~step decay provides a meaningful boost regardless of the starting learning rate, and (4)~smaller mini-batches give a marginal generalization advantage at this scale.
 
+\clearpage
+\section{Exercise 2.2: Multiple Binary Cross-Entropy Loss}
+
+\subsection*{Setup}
+
+Instead of softmax, each score $s_k$ is mapped independently to a probability via the sigmoid function
+\[
+  p_k = \sigma(s_k) = \frac{1}{1+e^{-s_k}}, \quad k=1,\ldots,K
+\]
+and the network is trained with $K$ independent binary cross-entropy losses:
+\[
+  l_{\text{BCE}}(\mathbf{x},\mathbf{y})
+  = -\frac{1}{K}\sum_{k=1}^{K}
+    \bigl[(1-y_k)\log(1-p_k) + y_k\log(p_k)\bigr].
+\]
+
+\subsection*{Gradient Derivation}
+
+We compute $\partial l_{\text{BCE}}/\partial s_k$ using the chain rule.
+Since $\sigma'(s) = \sigma(s)\bigl(1-\sigma(s)\bigr) = p_k(1-p_k)$:
+
+\begin{align*}
+  \frac{\partial l_{\text{BCE}}}{\partial s_k}
+  &= -\frac{1}{K}\left[
+      (1-y_k)\cdot\frac{-\sigma'(s_k)}{1-p_k}
+      + y_k\cdot\frac{\sigma'(s_k)}{p_k}
+    \right] \\
+  &= -\frac{1}{K}\left[
+      -(1-y_k)\,p_k + y_k(1-p_k)
+    \right] \\
+  &= -\frac{1}{K}\left[-p_k + y_k\right]
+   = \frac{1}{K}(p_k - y_k).
+\end{align*}
+
+In matrix form over a mini-batch of size $n$:
+\[
+  \frac{\partial l_{\text{BCE}}}{\partial \mathbf{s}}
+  = \frac{1}{K}(\mathbf{P} - \mathbf{Y}),
+\]
+which has the same structure as the softmax gradient $\mathbf{P}-\mathbf{Y}$
+but scaled by $1/K$.
+The gradients w.r.t.\ $W$ and $\mathbf{b}$ are therefore identical in form:
+\[
+  \frac{\partial J}{\partial W}
+  = \frac{1}{n}\,\frac{1}{K}(\mathbf{P}-\mathbf{Y})\mathbf{X}^\top + 2\lambda W,
+  \qquad
+  \frac{\partial J}{\partial \mathbf{b}}
+  = \frac{1}{n}\,\frac{1}{K}(\mathbf{P}-\mathbf{Y})\mathbf{1}.
+\]
+
+\subsection*{Results}
+
+Because the $1/K$ factor shrinks gradient magnitudes by a factor of $K=10$,
+the learning rate was increased by the same factor ($\eta=0.01$ for BCE vs.\
+$\eta=0.001$ for softmax). Both models were trained with the same
+setup: \texttt{n\_batch}=50, $\lambda=0.01$, step decay $\times 0.1$ at
+epoch~20, flip augmentation, 49k training images.
+
+\begin{table}[h]
+\centering
+\caption{Sigmoid BCE vs.\ softmax cross-entropy on the test set.}
+\begin{tabular}{@{}lcc@{}}
+\toprule
+Model & $\eta$ & Test Acc \\
+\midrule
+Softmax CE   & 0.001 & \textbf{TODO}\% \\
+Sigmoid BCE  & 0.01  & \textbf{TODO}\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection*{Histogram Analysis}
+
+Figure~\ref{fig:hist} shows the distribution of $p_{\text{true}}$ — the
+probability the model assigns to the ground-truth class — split by whether
+the example was classified correctly or not.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.48\textwidth]{histogram_softmax.png}\hfill
+\includegraphics[width=0.48\textwidth]{histogram_bce.png}
+\caption{P(true class) histograms for correctly (blue) and incorrectly (red)
+         classified test examples.
+         Left: softmax CE. Right: sigmoid BCE.}
+\label{fig:hist}
+\end{figure}
+
+For softmax, the probabilities of correctly classified examples are
+concentrated towards 1, reflecting the mutual-exclusivity constraint
+($\sum_k p_k = 1$): once one class dominates, the rest are suppressed.
+For sigmoid BCE, probabilities are more spread out since each $p_k$ is
+independent and need not compete with the others, so the model can assign
+moderate probability to multiple classes simultaneously.
+Incorrectly classified examples tend to have low $p_{\text{true}}$ under
+both models, but the BCE model shows \textbf{TODO}
+(more/less) over-confidence on wrong examples compared to softmax.
+Both models exhibit similar degrees of overfitting, visible in the
+training/validation loss gap (Figures are saved as
+\texttt{history\_bce.png} and \texttt{history\_softmax\_cmp.png}).
+
 \end{document}
