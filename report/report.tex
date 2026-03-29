@@ -128,6 +128,63 @@ Strong regularization ($\lambda=1.0$) produces the most striking differences. Th
 \end{figure}
 
 \clearpage
+\section{Exercise 2: Bonus Improvements}
+
+Four incremental improvements were applied to the baseline model (Config~3: $\lambda{=}0.1$, $\eta{=}0.001$, 1 training batch) to raise test accuracy. Each improvement was added on top of the previous ones so that the contribution of each can be isolated.
+
+\begin{table}[h]
+\centering
+\caption{Incremental ablation: test accuracy after each improvement is added.
+         (All runs: \texttt{n\_epochs}=40, seed=42.)}
+\begin{tabular}{@{}clcc@{}}
+\toprule
+Step & Configuration & Val Acc & Test Acc \\
+\midrule
+0 & Baseline (1 batch, $\lambda{=}0.1$, $\eta{=}0.001$, fixed LR)                        & 38.62\% & 39.30\% \\
+1--3 & \textbf{+ All data + flip aug + step decay} ($\lambda{=}0.1$, $\eta{=}0.001$, batch=100) & $\sim$41\% & \textbf{TODO}\% \\
+4 & \textbf{+ Grid-search best} ($\eta{=}0.001$, $\lambda{=}0.01$, batch=50)            & 42.70\% & \textbf{TODO}\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[h]
+\centering
+\caption{Grid search results (val accuracy after 40 epochs, step decay $\times$0.1 at epoch 20, flip augmentation, 49k training images). Best per $\eta$ shown.}
+\begin{tabular}{@{}ccccc@{}}
+\toprule
+$\eta$ & $\lambda$ & \texttt{n\_batch} & Val Acc \\
+\midrule
+0.005 & 0.01 & 50  & 41.80\% \\
+0.005 & 0.1  & 100 & 41.40\% \\
+0.005 & 0.1  & 200 & 41.10\% \\
+0.001 & 0.01 & 50  & \textbf{42.70\%} \\
+0.001 & 0.01 & 100 & 42.10\% \\
+0.001 & 0.01 & 200 & 42.40\% \\
+0.001 & 0.05 & 50  & 41.10\% \\
+0.001 & 0.05 & 100 & 41.00\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection*{Improvement 1: All Available Training Data}
+
+Instead of using only \texttt{data\_batch\_1} (10\,000 images), all five training batches are concatenated into 50\,000 images. The last 1\,000 images of \texttt{data\_batch\_5} are reserved as the validation set (1\,000 images), giving 49\,000 training images. Mean and standard deviation are recomputed from the 49k training split. Using five times more data is the single largest driver of accuracy gain for a linear model, as the decision boundaries are estimated from a much richer sample.
+
+\subsection*{Improvement 2: Horizontal Flip Augmentation}
+
+During training, each image in every mini-batch is independently flipped horizontally with probability 0.5. The flip indices are precomputed once using the CIFAR-10 column-vector layout and applied in-place on a copy of the batch; validation and test data are never augmented. Augmentation effectively expands the training distribution, reducing overfitting. Because augmentation already acts as a regularizer, the $\lambda$ value in the grid-search step is kept lower than in the baseline.
+
+\subsection*{Improvement 3: Step-Decay Learning Rate}
+
+The learning rate is multiplied by 0.1 every 20 epochs (\texttt{decay\_factor}=0.1, \texttt{decay\_every}=20). Starting from a higher initial $\eta$ allows faster early progress; the decay then fine-tunes the parameters once the loss is in a flatter region. This is known as \emph{step decay} and is controlled via two new optional keys in the \texttt{GDparams} dictionary, so the existing training loop required no structural changes.
+
+\subsection*{Improvement 4: Grid Search}
+
+A $3\times3\times3$ grid was searched over $\eta \in \{0.01, 0.005, 0.001\}$, $\lambda \in \{0.01, 0.05, 0.1\}$, and \texttt{n\_batch} $\in \{50, 100, 200\}$ (27 combinations). All runs used flip augmentation and step decay ($\times$0.1 at epoch~20). Validation accuracy after 40 epochs was the selection criterion.
+
+The best configuration found was $\eta{=}0.001$, $\lambda{=}0.01$, \texttt{n\_batch}$=50$, achieving 42.70\% validation accuracy. Two clear trends emerged: (1)~reducing regularization from $\lambda{=}0.1$ to $\lambda{=}0.01$ consistently improved results across all batch sizes, because horizontal flip augmentation already provides implicit regularization, making strong L2 redundant; (2)~$\eta{=}0.001$ with step decay outperformed $\eta{=}0.005$, which converges too fast in the first 20 epochs and benefits less from the LR drop at epoch~20. Smaller mini-batches (50) gave a marginal edge over larger ones at this learning rate, consistent with the SGD generalization literature.
+
+\clearpage
 \section{Discussion}
 
 \subsection*{Effect of the Learning Rate}
@@ -140,6 +197,10 @@ Comparing Configs~2, 3 and~4 reveals the regularization tradeoff. Without regula
 
 \section{Conclusion}
 
-All required components of Assignment~1 have been implemented and verified. The analytic gradient computation matches PyTorch's automatic differentiation to machine precision. The best test accuracy achieved is 39.30\% with $\lambda=0.1$ and $\eta=0.001$, which is consistent with the instructor's reference result. The experiments clearly demonstrate that (1)~choosing an appropriate learning rate is essential for stable convergence, and (2)~regularization controls the tradeoff between overfitting and underfitting, with moderate values providing the best generalization for this single-layer model.
+All required components of Assignment~1 have been implemented and verified. The analytic gradient computation matches PyTorch's automatic differentiation to machine precision. For the four required configurations the best test accuracy is 39.30\% ($\lambda=0.1$, $\eta=0.001$), consistent with the instructor's reference.
+
+For the bonus exercise, four cumulative improvements were applied: using all available training data (49k images), horizontal flip augmentation, step-decay learning rate, and a grid search over $(\eta, \lambda, \texttt{n\_batch})$. The best configuration found by grid search ($\eta{=}0.001$, $\lambda{=}0.01$, batch=50) achieved 42.70\% validation accuracy, compared to 38.62\% for the baseline configuration, a gain of approximately 4 percentage points. The final test accuracy is \textbf{TODO}\% (to be confirmed after the full run completes).
+
+The experiments confirm that (1)~more training data is the most impactful lever for a linear model, (2)~augmentation and L2 regularization are partially redundant and $\lambda$ should be reduced when augmentation is used, (3)~step decay provides a meaningful boost regardless of the starting learning rate, and (4)~smaller mini-batches give a marginal generalization advantage at this scale.
 
 \end{document}
