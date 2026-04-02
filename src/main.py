@@ -331,10 +331,6 @@ if __name__ == "__main__":
     figures_dir.mkdir(exist_ok=True)
     figures_bonus_dir.mkdir(exist_ok=True)
 
-    # ------------------------------------------------------------------ #
-    # PHASE 1 — Required configs                                          #
-    # Train: data_batch_1 (10k), Val: data_batch_2, no flip augmentation #
-    # ------------------------------------------------------------------ #
     p1_trainX, p1_trainY, p1_trainy = LoadBatch(data_dir / "data_batch_1")
     p1_valX,   p1_valY,   p1_valy   = LoadBatch(data_dir / "data_batch_2")
     testX,     testY,     testy     = LoadBatch(data_dir / "test_batch")
@@ -418,10 +414,8 @@ if __name__ == "__main__":
         VisualizeWeights(trained_net,
                          save_path=figures_dir / f"weights_{label}.png")
 
-    # ------------------------------------------------------------------ #
-    # PHASE 2 — Bonus                                                     #
-    # Train: all 5 batches minus last 1k, Val: last 1k, flip augmentation #
-    # ------------------------------------------------------------------ #
+    # PHASE 2 : Bonus
+ 
     all_X, all_Y, all_y = [], [], []
     for i in range(1, 6):
         X_i, Y_i, y_i = LoadBatch(data_dir / f"data_batch_{i}")
