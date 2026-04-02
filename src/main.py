@@ -326,32 +326,30 @@ def PlotConfidenceHistogram(p_correct, p_wrong, title="", save_path=None):
 if __name__ == "__main__":
     ROOT = Path(__file__).resolve().parent.parent
     data_dir = ROOT / "Datasets" / "cifar-10-python" / "cifar-10-batches-py"
-    figures_dir = ROOT / "figures"
+    figures_dir       = ROOT / "figures"
+    figures_bonus_dir = ROOT / "figures" / "bonus"
     figures_dir.mkdir(exist_ok=True)
+    figures_bonus_dir.mkdir(exist_ok=True)
 
-    all_X, all_Y, all_y = [], [], []
-    for i in range(1, 6):
-        X_i, Y_i, y_i = LoadBatch(data_dir / f"data_batch_{i}")
-        all_X.append(X_i); all_Y.append(Y_i); all_y.append(y_i)
-    all_X = np.concatenate(all_X, axis=1)
-    all_Y = np.concatenate(all_Y, axis=1)
-    all_y = np.concatenate(all_y, axis=0)
+    # ------------------------------------------------------------------ #
+    # PHASE 1 — Required configs                                          #
+    # Train: data_batch_1 (10k), Val: data_batch_2, no flip augmentation #
+    # ------------------------------------------------------------------ #
+    p1_trainX, p1_trainY, p1_trainy = LoadBatch(data_dir / "data_batch_1")
+    p1_valX,   p1_valY,   p1_valy   = LoadBatch(data_dir / "data_batch_2")
+    testX,     testY,     testy     = LoadBatch(data_dir / "test_batch")
 
-    trainX, trainY, trainy = all_X[:, :-1000], all_Y[:, :-1000], all_y[:-1000]
-    valX,   valY,   valy   = all_X[:, -1000:], all_Y[:, -1000:], all_y[-1000:]
+    p1_mean_X = np.mean(p1_trainX, axis=1, keepdims=True)
+    p1_std_X  = np.std(p1_trainX,  axis=1, keepdims=True)
 
-    testX,  testY,  testy  = LoadBatch(data_dir / "test_batch")
-
-    mean_X = np.mean(trainX, axis=1, keepdims=True)
-    std_X  = np.std(trainX,  axis=1, keepdims=True)
-
-    trainX = NormalizeData(trainX, mean_X, std_X)
-    valX   = NormalizeData(valX,   mean_X, std_X)
-    testX  = NormalizeData(testX,  mean_X, std_X)
+    p1_trainX = NormalizeData(p1_trainX, p1_mean_X, p1_std_X)
+    p1_valX   = NormalizeData(p1_valX,   p1_mean_X, p1_std_X)
+    p1_testX  = NormalizeData(testX,     p1_mean_X, p1_std_X)
 
     K = 10
-    d = trainX.shape[0]
+    d = p1_trainX.shape[0]
 
+    # Gradient checks use phase-1 data
     rng = np.random.default_rng(42)
     d_small, n_small = 10, 3
 
@@ -360,12 +358,12 @@ if __name__ == "__main__":
         "b": np.zeros((K, 1))
     }
 
-    X_small = trainX[0:d_small, 0:n_small]
-    Y_small = trainY[:, 0:n_small]
-    y_small = trainy[0:n_small]
+    X_small = p1_trainX[0:d_small, 0:n_small]
+    Y_small = p1_trainY[:, 0:n_small]
+    y_small = p1_trainy[0:n_small]
 
-    P_small   = ApplyNetwork(X_small, small_net)
-    my_grads  = BackwardPass(X_small, Y_small, P_small, small_net, lam=0.0)
+    P_small     = ApplyNetwork(X_small, small_net)
+    my_grads    = BackwardPass(X_small, Y_small, P_small, small_net, lam=0.0)
     torch_grads = ComputeGradsWithTorch(X_small, y_small, small_net)
 
     print("-- Gradient check (lam=0) -------------------------")
@@ -374,7 +372,6 @@ if __name__ == "__main__":
     print(f"  max rel error  W: {MaxRelativeError(my_grads['W'], torch_grads['W']):.2e}")
     print(f"  max rel error  b: {MaxRelativeError(my_grads['b'], torch_grads['b']):.2e}")
 
-    # repeat with lam > 0 to check regularisation term
     lam_check = 0.1
     my_grads_reg    = BackwardPass(X_small, Y_small, P_small, small_net, lam=lam_check)
     torch_grads_reg = ComputeGradsWithTorch(X_small, y_small, small_net, lam=lam_check)
@@ -385,16 +382,6 @@ if __name__ == "__main__":
     print(f"  max rel error  W: {MaxRelativeError(my_grads_reg['W'], torch_grads_reg['W']):.2e}")
     print(f"  max rel error  b: {MaxRelativeError(my_grads_reg['b'], torch_grads_reg['b']):.2e}")
 
-    aa = np.int32(np.arange(32)).reshape((32, 1))
-    bb = np.int32(np.arange(31, -1, -1)).reshape((32, 1))
-    vv = np.tile(32 * aa, (1, 32))
-    ind_flip = vv.reshape((32 * 32, 1)) + np.tile(bb, (32, 1))
-    inds_flip = np.vstack((ind_flip, 1024 + ind_flip))
-    inds_flip = np.vstack((inds_flip, 2048 + ind_flip)).squeeze()  # (3072,)
-
-    train_rng = np.random.default_rng(42)
-
-    # Training for all 4 given configurations
     configs = [
         {"lam": 0.0, "eta": 0.1,   "n_epochs": 40, "n_batch": 100},
         {"lam": 0.0, "eta": 0.001, "n_epochs": 40, "n_batch": 100},
@@ -402,7 +389,7 @@ if __name__ == "__main__":
         {"lam": 1.0, "eta": 0.001, "n_epochs": 40, "n_batch": 100},
     ]
 
-    print("\n-- Training---------------------------------")
+    print("\n-- Phase 1: required configs (batch_1 train, batch_2 val, no augmentation) --")
     for cfg in configs:
         lam      = cfg["lam"]
         eta      = cfg["eta"]
@@ -415,19 +402,52 @@ if __name__ == "__main__":
         init_net = InitNetwork(K, d, seed=42)
         GDparams = {"n_batch": n_batch, "eta": eta, "n_epochs": n_epochs}
 
-        trained_net, history = MiniBatchGD(trainX, trainY, trainy, valX, valY, valy, GDparams, init_net, lam,
-                                            inds_flip=inds_flip, rng=train_rng)
+        trained_net, history = MiniBatchGD(
+            p1_trainX, p1_trainY, p1_trainy,
+            p1_valX,   p1_valY,   p1_valy,
+            GDparams, init_net, lam,
+            inds_flip=None, rng=None
+        )
 
-        # test accuracy
-        P_test   = ApplyNetwork(testX, trained_net)
+        P_test   = ApplyNetwork(p1_testX, trained_net)
         test_acc = ComputeAccuracy(P_test, testy)
         print(f"  Final test accuracy: {test_acc*100:.2f}%")
 
-        PlotHistory(history, title=f"lam={lam}, eta={eta}", save_path=figures_dir / f"history_{label}.png")
+        PlotHistory(history, title=f"lam={lam}, eta={eta}",
+                    save_path=figures_dir / f"history_{label}.png")
+        VisualizeWeights(trained_net,
+                         save_path=figures_dir / f"weights_{label}.png")
 
-        VisualizeWeights(trained_net, save_path=figures_dir / f"weights_{label}.png")
+    # ------------------------------------------------------------------ #
+    # PHASE 2 — Bonus                                                     #
+    # Train: all 5 batches minus last 1k, Val: last 1k, flip augmentation #
+    # ------------------------------------------------------------------ #
+    all_X, all_Y, all_y = [], [], []
+    for i in range(1, 6):
+        X_i, Y_i, y_i = LoadBatch(data_dir / f"data_batch_{i}")
+        all_X.append(X_i); all_Y.append(Y_i); all_y.append(y_i)
+    all_X = np.concatenate(all_X, axis=1)
+    all_Y = np.concatenate(all_Y, axis=1)
+    all_y = np.concatenate(all_y, axis=0)
 
-    print("\n-- Grid search ------------------------------------")
+    trainX, trainY, trainy = all_X[:, :-1000], all_Y[:, :-1000], all_y[:-1000]
+    valX,   valY,   valy   = all_X[:, -1000:], all_Y[:, -1000:], all_y[-1000:]
+
+    mean_X = np.mean(trainX, axis=1, keepdims=True)
+    std_X  = np.std(trainX,  axis=1, keepdims=True)
+
+    trainX = NormalizeData(trainX, mean_X, std_X)
+    valX   = NormalizeData(valX,   mean_X, std_X)
+    bonusTestX = NormalizeData(testX, mean_X, std_X)
+
+    aa = np.int32(np.arange(32)).reshape((32, 1))
+    bb = np.int32(np.arange(31, -1, -1)).reshape((32, 1))
+    vv = np.tile(32 * aa, (1, 32))
+    ind_flip = vv.reshape((32 * 32, 1)) + np.tile(bb, (32, 1))
+    inds_flip = np.vstack((ind_flip, 1024 + ind_flip))
+    inds_flip = np.vstack((inds_flip, 2048 + ind_flip)).squeeze()  # (3072,)
+
+    print("\n-- Phase 2: grid search ------------------------------------")
     grid_etas    = [0.01, 0.005, 0.001]
     grid_lams    = [0.01, 0.05,  0.1]
     grid_batches = [50,   100,   200]
@@ -463,11 +483,19 @@ if __name__ == "__main__":
 
     print(f"\n-- Grid search best: {best_cfg_gs}  val acc: {best_val_acc*100:.2f}%")
 
-    # ------------------------------------------------------------------ #
-    # Exercise 2.2: Sigmoid + multiple binary cross-entropy               #
-    # ------------------------------------------------------------------ #
+    print("\n-- Best grid config test evaluation ------------------")
+    gs_best_params = {"n_batch": 200, "eta": 0.005, "n_epochs": 40,
+                      "decay_factor": 0.1, "decay_every": 20}
+    gs_best_net = InitNetwork(K, d, seed=42)
+    trained_best, _ = MiniBatchGD(
+        trainX, trainY, trainy, valX, valY, valy,
+        gs_best_params, gs_best_net, lam=0.01,
+        inds_flip=inds_flip, rng=np.random.default_rng(42)
+    )
+    P_test_best = ApplyNetwork(bonusTestX, trained_best)
+    print(f"  Best grid config test acc: {ComputeAccuracy(P_test_best, testy)*100:.2f}%")
 
-    # --- gradient check ---
+    # --- BCE gradient check ---
     P_bce_small  = ApplyNetworkSigmoid(X_small, small_net)
     Y_small_oh   = np.zeros((K, n_small))
     Y_small_oh[y_small, np.arange(n_small)] = 1.0
@@ -480,7 +508,6 @@ if __name__ == "__main__":
     print(f"  max rel error  W: {MaxRelativeError(my_grads_bce['W'], torch_grads_bce['W']):.2e}")
     print(f"  max rel error  b: {MaxRelativeError(my_grads_bce['b'], torch_grads_bce['b']):.2e}")
 
-    # --- train BCE (eta *= K to compensate for 1/K in gradient) ---
     print("\n-- BCE training -----------------------------------")
     bce_params = {"n_batch": 50, "eta": 0.01, "n_epochs": 40,
                   "decay_factor": 0.1, "decay_every": 20}
@@ -494,7 +521,6 @@ if __name__ == "__main__":
         backward_fn=BackwardPassBCE
     )
 
-    # --- softmax comparison run with identical hyperparams ---
     print("\n-- Softmax comparison run -------------------------")
     sm_params = {"n_batch": 50, "eta": 0.001, "n_epochs": 40,
                  "decay_factor": 0.1, "decay_every": 20}
@@ -505,21 +531,18 @@ if __name__ == "__main__":
         inds_flip=inds_flip, rng=np.random.default_rng(42)
     )
 
-    # --- test accuracy ---
-    P_test_bce = ApplyNetworkSigmoid(testX, trained_bce)
-    P_test_sm  = ApplyNetwork(testX,         trained_sm)
+    P_test_bce = ApplyNetworkSigmoid(bonusTestX, trained_bce)
+    P_test_sm  = ApplyNetwork(bonusTestX,        trained_sm)
     acc_bce = ComputeAccuracy(P_test_bce, testy)
     acc_sm  = ComputeAccuracy(P_test_sm,  testy)
     print(f"\n  BCE  test accuracy: {acc_bce*100:.2f}%")
     print(f"  Softmax test accuracy: {acc_sm*100:.2f}%")
 
-    # --- loss curve plots ---
     PlotHistory(history_bce, title="BCE (sigmoid), eta=0.01, lam=0.01",
-                save_path=figures_dir / "history_bce.png")
+                save_path=figures_bonus_dir / "history_bce.png")
     PlotHistory(history_sm,  title="Softmax CE,    eta=0.001, lam=0.01",
-                save_path=figures_dir / "history_softmax_cmp.png")
+                save_path=figures_bonus_dir / "history_softmax_cmp.png")
 
-    # --- histogram: P(true class) for correct vs incorrect ---
     def true_class_probs(P, y):
         return P[y, np.arange(P.shape[1])]
 
@@ -527,10 +550,10 @@ if __name__ == "__main__":
     correct_bce = np.argmax(P_test_bce, axis=0) == testy
     PlotConfidenceHistogram(p_true_bce[correct_bce], p_true_bce[~correct_bce],
                             title="Sigmoid BCE — P(true class)",
-                            save_path=figures_dir / "histogram_bce.png")
+                            save_path=figures_bonus_dir / "histogram_bce.png")
 
     p_true_sm = true_class_probs(P_test_sm, testy)
     correct_sm = np.argmax(P_test_sm, axis=0) == testy
     PlotConfidenceHistogram(p_true_sm[correct_sm], p_true_sm[~correct_sm],
                             title="Softmax CE — P(true class)",
-                            save_path=figures_dir / "histogram_softmax.png")
+                            save_path=figures_bonus_dir / "histogram_softmax.png")

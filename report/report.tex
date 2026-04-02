@@ -66,7 +66,7 @@ With a learning rate of 0.1, the training is highly unstable. The loss oscillate
 
 \begin{figure}[h]
 \centering
-\includegraphics[width=\textwidth]{history_lam0.0_eta0.001_epochs40_batch100.png}
+\includegraphics[width=\textwidth]{history_lam0.0_eta0.1_epochs40_batch100.png}
 \caption{Loss and cost curves for $\lambda=0$, $\eta=0.1$. Highly unstable training.}
 \end{figure}
 
@@ -117,7 +117,7 @@ Strong regularization ($\lambda=1.0$) produces the most striking differences. Th
 
 \begin{figure}[h]
 \centering
-\includegraphics[width=\textwidth]{history_lam0.0_eta0.1_epochs40_batch100.png}
+\includegraphics[width=\textwidth]{history_lam1.0_eta0.001_epochs40_batch100.png}
 \caption{Loss and cost curves for $\lambda=1.0$, $\eta=0.001$. Minimal overfitting but early plateau.}
 \end{figure}
 
@@ -142,7 +142,7 @@ Step & Configuration & Val Acc & Test Acc \\
 \midrule
 0 & Baseline (1 batch, $\lambda{=}0.1$, $\eta{=}0.001$, fixed LR)                        & 38.62\% & 39.30\% \\
 1--3 & \textbf{+ All data + flip aug + step decay} ($\lambda{=}0.1$, $\eta{=}0.001$, batch=100) & $\sim$41\% & \textbf{TODO}\% \\
-4 & \textbf{+ Grid-search best} ($\eta{=}0.001$, $\lambda{=}0.01$, batch=50)            & 42.70\% & \textbf{TODO}\% \\
+4 & \textbf{+ Grid-search best} ($\eta{=}0.005$, $\lambda{=}0.01$, batch=200)            & 42.80\% & 42.30\% \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -155,9 +155,10 @@ Step & Configuration & Val Acc & Test Acc \\
 $\eta$ & $\lambda$ & \texttt{n\_batch} & Val Acc \\
 \midrule
 0.005 & 0.01 & 50  & 41.80\% \\
+0.005 & 0.01 & 200 & \textbf{42.80\%} \\
 0.005 & 0.1  & 100 & 41.40\% \\
 0.005 & 0.1  & 200 & 41.10\% \\
-0.001 & 0.01 & 50  & \textbf{42.70\%} \\
+0.001 & 0.01 & 50  & 42.70\% \\
 0.001 & 0.01 & 100 & 42.10\% \\
 0.001 & 0.01 & 200 & 42.40\% \\
 0.001 & 0.05 & 50  & 41.10\% \\
@@ -182,7 +183,7 @@ The learning rate is multiplied by 0.1 every 20 epochs (\texttt{decay\_factor}=0
 
 A $3\times3\times3$ grid was searched over $\eta \in \{0.01, 0.005, 0.001\}$, $\lambda \in \{0.01, 0.05, 0.1\}$, and \texttt{n\_batch} $\in \{50, 100, 200\}$ (27 combinations). All runs used flip augmentation and step decay ($\times$0.1 at epoch~20). Validation accuracy after 40 epochs was the selection criterion.
 
-The best configuration found was $\eta{=}0.001$, $\lambda{=}0.01$, \texttt{n\_batch}$=50$, achieving 42.70\% validation accuracy. Two clear trends emerged: (1)~reducing regularization from $\lambda{=}0.1$ to $\lambda{=}0.01$ consistently improved results across all batch sizes, because horizontal flip augmentation already provides implicit regularization, making strong L2 redundant; (2)~$\eta{=}0.001$ with step decay outperformed $\eta{=}0.005$, which converges too fast in the first 20 epochs and benefits less from the LR drop at epoch~20. Smaller mini-batches (50) gave a marginal edge over larger ones at this learning rate, consistent with the SGD generalization literature.
+The best configuration found was $\eta{=}0.005$, $\lambda{=}0.01$, \texttt{n\_batch}$=200$, achieving 42.80\% validation accuracy. Two clear trends emerged: (1)~reducing regularization from $\lambda{=}0.1$ to $\lambda{=}0.01$ consistently improved results across all batch sizes, because horizontal flip augmentation already provides implicit regularization, making strong L2 redundant; (2)~$\eta{=}0.005$ with step decay outperformed $\eta{=}0.001$, as the higher initial learning rate makes better use of the larger 49k dataset before the decay kicks in at epoch~20. Larger mini-batches (200) provided a slight edge at this learning rate, likely due to more stable gradient estimates over the expanded training set.
 
 \clearpage
 \section{Discussion}
@@ -199,7 +200,7 @@ Comparing Configs~2, 3 and~4 reveals the regularization tradeoff. Without regula
 
 All required components of Assignment~1 have been implemented and verified. The analytic gradient computation matches PyTorch's automatic differentiation to machine precision. For the four required configurations the best test accuracy is 39.30\% ($\lambda=0.1$, $\eta=0.001$), consistent with the instructor's reference.
 
-For the bonus exercise, four cumulative improvements were applied: using all available training data (49k images), horizontal flip augmentation, step-decay learning rate, and a grid search over $(\eta, \lambda, \texttt{n\_batch})$. The best configuration found by grid search ($\eta{=}0.001$, $\lambda{=}0.01$, batch=50) achieved 42.70\% validation accuracy, compared to 38.62\% for the baseline configuration, a gain of approximately 4 percentage points. The final test accuracy is \textbf{TODO}\% (to be confirmed after the full run completes).
+For the bonus exercise, four cumulative improvements were applied: using all available training data (49k images), horizontal flip augmentation, step-decay learning rate, and a grid search over $(\eta, \lambda, \texttt{n\_batch})$. The best configuration found by grid search ($\eta{=}0.005$, $\lambda{=}0.01$, batch=200) achieved 42.80\% validation accuracy, compared to 38.62\% for the baseline configuration, a gain of approximately 4 percentage points. The final test accuracy is 42.30\%.
 
 The experiments confirm that (1)~more training data is the most impactful lever for a linear model, (2)~augmentation and L2 regularization are partially redundant and $\lambda$ should be reduced when augmentation is used, (3)~step decay provides a meaningful boost regardless of the starting learning rate, and (4)~smaller mini-batches give a marginal generalization advantage at this scale.
 
@@ -268,8 +269,8 @@ epoch~20, flip augmentation, 49k training images.
 \toprule
 Model & $\eta$ & Test Acc \\
 \midrule
-Softmax CE   & 0.001 & \textbf{TODO}\% \\
-Sigmoid BCE  & 0.01  & \textbf{TODO}\% \\
+Softmax CE   & 0.001 & 42.22\% \\
+Sigmoid BCE  & 0.01  & 41.13\% \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -297,8 +298,8 @@ For sigmoid BCE, probabilities are more spread out since each $p_k$ is
 independent and need not compete with the others, so the model can assign
 moderate probability to multiple classes simultaneously.
 Incorrectly classified examples tend to have low $p_{\text{true}}$ under
-both models, but the BCE model shows \textbf{TODO}
-(more/less) over-confidence on wrong examples compared to softmax.
+both models, but the BCE model shows less
+over-confidence on wrong examples compared to softmax.
 Both models exhibit similar degrees of overfitting, visible in the
 training/validation loss gap (Figures are saved as
 \texttt{history\_bce.png} and \texttt{history\_softmax\_cmp.png}).
